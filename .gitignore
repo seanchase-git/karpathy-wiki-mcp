@@ -1,0 +1,5 @@
+node_modules/
+dist/
+wikis/
+*.tmp-*
+.DS_Store
