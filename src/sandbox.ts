@@ -157,14 +157,14 @@ export class WikiRoot {
       throw new WikiError(
         "sandbox_id is missing.",
         "Pass the sandbox_id that wiki_start returned. If you have none yet, call wiki_start first.",
-        'wiki_status sandbox_id="20261018-143005-gemma-3-31b"',
+        'wiki_status sandbox_id="20261018-143005-my-model"',
       );
     }
     const recent = async () => (await this.listIds()).slice(0, 5);
     if (!ID_RE.test(id)) {
       const ids = await recent();
       throw new WikiError(
-        `"${raw}" is not a valid sandbox_id. Ids look like 20261018-143005-gemma-3-31b.`,
+        `"${raw}" is not a valid sandbox_id. Ids look like 20261018-143005-my-model.`,
         ids.length ? `Recent sandboxes: ${ids.join(", ")}. Or call wiki_start to create a new one.` : "Call wiki_start to create a sandbox.",
       );
     }

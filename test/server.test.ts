@@ -39,18 +39,15 @@ describe("tool flow", () => {
     expect(await readFile(path.join(dir, "log.md"), "utf8")).toMatch(/## \[\d{4}-\d\d-\d\d \d\d:\d\d\] start \|/);
   });
 
-  it("requires a model unless exactly one LLM is loaded", async () => {
-    const one = await harness({ fetchImpl: (async () => new Response(JSON.stringify({ models: [{ type: "llm", key: "qwen3-32b", loaded_instances: [{ id: "q" }] }] }))) as typeof fetch });
-    expect((await one.call("wiki_start", {})).text).toMatch(/sandbox_id: \d{8}-\d{6}-qwen3-32b/);
-    const two = await harness({
-      fetchImpl: (async () =>
-        new Response(JSON.stringify({ data: [{ id: "a", type: "llm", state: "loaded" }, { id: "b", type: "llm", state: "loaded" }] }))) as typeof fetch,
-    });
-    const r = await two.call("wiki_start", {});
-    expect(r.isError).toBe(true);
-    expect(r.text).toContain("Several models are loaded (a, b)");
-    const none = await harness({ fetchImpl: (async () => { throw new Error("down"); }) as typeof fetch });
-    expect((await none.call("wiki_start", {})).text).toContain("model is required");
+  it("requires a real model id and rejects example values", async () => {
+    const h = await harness();
+    for (const model of [undefined, "", "  ", "<your-model-id>", "my-model", "Model"]) {
+      const r = await h.call("wiki_start", model === undefined ? {} : { model });
+      expect(r.isError).toBe(true);
+      expect(r.text).toContain("ask the user which model you are");
+    }
+    expect((await h.call("wiki_start", { model: "<your-model-id>" })).text).toContain("is an example, not a model id");
+    expect((await h.call("wiki_start", { model: "qwen/qwen3-32b" })).text).toMatch(/sandbox_id: \d{8}-\d{6}-qwen3-32b/);
   });
 
   it("paginates long reads", async () => {

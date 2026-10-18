@@ -5,7 +5,6 @@ import { WikiError } from "../src/errors.js";
 import { safePath } from "../src/fsutil.js";
 import { suggest } from "../src/fuzzy.js";
 import { lintPages } from "../src/lint.js";
-import { parseLoaded } from "../src/lmstudio.js";
 import { cleanName, extractLinks, normalizeType, parsePage, replaceSection, sanitizeTitle, serializePage, toList } from "../src/pages.js";
 import { slugifyModel, timestampId, WikiRoot } from "../src/sandbox.js";
 import { bm25, chunkDocument } from "../src/search.js";
@@ -151,11 +150,4 @@ describe("lint", () => {
   });
 });
 
-describe("lmstudio", () => {
-  it("parses v1 and v0 shapes", () => {
-    expect(parseLoaded({ models: [{ type: "llm", key: "gemma-3-31b", loaded_instances: [{ id: "x" }] }, { type: "llm", key: "idle", loaded_instances: [] }, { type: "embedding", key: "e", loaded_instances: [{}] }] })).toEqual(["gemma-3-31b"]);
-    expect(parseLoaded({ data: [{ id: "a", type: "vlm", state: "loaded" }, { id: "b", type: "llm", state: "not-loaded" }] })).toEqual(["a"]);
-    expect(parseLoaded("nope")).toBeNull();
-  });
-});
 

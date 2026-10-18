@@ -20,7 +20,7 @@ Every fact in the wiki must come from a source. Never invent facts.
 ## 3. Your sandbox
 Every tool except wiki_get_info and wiki_start needs \`sandbox_id\`.
 1. **If the user gave you a sandbox_id** (in the system prompt or the chat), use it and call **wiki_status** first. Do NOT call wiki_start.
-2. **If the user asked for a new wiki**, call **wiki_start** with your model name.
+2. **If the user asked for a new wiki**, call **wiki_start** with your model id as the user or system prompt gave it. If nobody told you your model id, ask the user. Never guess it or copy an example.
 3. **If neither is clear, ask the user before calling any tool:** "Do you have a sandbox_id for an existing wiki, or should I start a new one?" Wait for the answer. Never guess or invent an id.
 
 Once you have a sandbox_id, pass it on every call for the rest of the conversation.
@@ -116,7 +116,7 @@ wiki_log sandbox_id="20261018-143005-my-model" operation="ingest" title="Example
 
 ## 10. Tool cheat sheet
 - **wiki_get_info**: this guide.
-- **wiki_start** \`model\`: creates your sandbox and returns its sandbox_id.
+- **wiki_start** \`model\` (your model id): creates your sandbox and returns its sandbox_id.
 - **wiki_status**: where things stand. Shows sources still to ingest, page counts, recent log entries and lint counts.
 - **wiki_list** \`folder\`: \`"wiki"\` or \`"raw"\`. Lists names and summaries.
 - **wiki_read** \`name\`: a page title, \`raw/<source>\`, \`index\`, \`log\` or \`SCHEMA\`. Add \`offset\` to continue a long file.

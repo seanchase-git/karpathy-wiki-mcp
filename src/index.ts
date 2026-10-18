@@ -18,8 +18,8 @@ function arg(name: string): string | undefined {
 async function main() {
   if (process.argv.includes("--help") || process.argv.includes("-h")) {
     process.stdout.write(
-      "karpathy-wiki-mcp [--root DIR] [--seed DIR|none] [--lmstudio-url URL]\n" +
-        "  env: WIKI_ROOT (default <repo>/wikis), WIKI_SEED_DIR (default <repo>/seed; 'none' disables), WIKI_LMSTUDIO_URL (default http://127.0.0.1:1234)\n",
+      "karpathy-wiki-mcp [--root DIR] [--seed DIR|none]'\n" +
+        "  env: WIKI_ROOT (default <repo>/wikis), WIKI_SEED_DIR (default <repo>/seed; 'none' disables)\n",
     );
     return;
   }
@@ -27,7 +27,6 @@ async function main() {
   const seedOpt = arg("seed") ?? process.env.WIKI_SEED_DIR;
   const defaultSeed = path.join(repoRoot, "seed");
   const seedDir = seedOpt === "none" ? undefined : seedOpt ? path.resolve(seedOpt) : existsSync(defaultSeed) ? defaultSeed : undefined;
-  const lmstudioUrl = arg("lmstudio-url") ?? process.env.WIKI_LMSTUDIO_URL ?? "http://127.0.0.1:1234";
 
   const wikis = new WikiRoot(root, seedDir);
   await wikis.init();
@@ -41,7 +40,7 @@ async function main() {
   process.stdin.on("close", shutdown);
 
   await repairIndexes(wikis);
-  const server = createServer({ root, seedDir, lmstudioUrl }, wikis);
+  const server = createServer({ root, seedDir }, wikis);
   await server.connect(new StdioServerTransport());
   process.stderr.write(`[karpathy-wiki-mcp] serving ${root}${seedDir ? ` (seed: ${seedDir})` : ""}\n`);
 }

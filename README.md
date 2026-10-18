@@ -2,6 +2,8 @@
 
 A sandboxed MCP server that implements Andrej Karpathy's [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) pattern. Its purpose is to **evaluate local models** in LM Studio. Each agent session gets its own wiki folder. The model then ingests sources, cross-links pages, answers questions from the wiki and lints it. You grade the result by opening that folder in Obsidian.
 
+**This server is built for LM Studio.** The setup, the eval workflow and the tuning of the tool text all assume LM Studio as the MCP host. The server itself is plain stdio MCP and never contacts LM Studio. Other MCP hosts should work, but they aren't tested.
+
 The tools are written for 26–31B models such as Gemma 31B, Gemma 26B and Qwen:
 - arguments are flat;
 - replies are plain markdown and end with a `Next:` hint;
@@ -37,11 +39,12 @@ Options are set as environment variables or flags:
 |---|---|---|---|
 | `WIKI_ROOT` | `--root` | `<repo>/wikis` | Where sandboxes are created |
 | `WIKI_SEED_DIR` | `--seed` | `<repo>/seed` | `.md`/`.txt` files copied into each new sandbox's `raw/`. Use `none` to start empty |
-| `WIKI_LMSTUDIO_URL` | `--lmstudio-url` | `http://127.0.0.1:1234` | Used only to guess the model name when the agent leaves it out |
 
 ## Running an evaluation
 
-1. Open a new LM Studio chat and use this system prompt: `You have access to a wiki MCP server. Your model name is gemma-3-31b. Call wiki_get_info before anything else.`
+1. Open a new LM Studio chat and use this system prompt, with `<MODEL>` replaced by the id of the model under test (for example `qwen3-32b`): `You have access to a wiki MCP server. Your model id is <MODEL>. Call wiki_get_info before anything else.`
+
+   **Always set the model id in the system prompt.** A model doesn't know its own id, and the server doesn't ask LM Studio. Without the id, the model is told to ask you. `wiki_start` rejects a missing id and example values such as `<your-model-id>` or `my-model`, but it can't detect a wrong id. A model told it is `gemma-3-31b` will name the sandbox after Gemma.
 2. Paste a prompt from `scenarios/`, starting with `01-cold-start-ingest.md`.
 3. Open `wikis/<sandbox_id>/` **as its own Obsidian vault**, then go through that scenario's checklist. Opening the sandbox folder alone keeps `[[links]]` from resolving into other sandboxes.
 
@@ -50,7 +53,7 @@ Options are set as environment variables or flags:
 ## Sandbox layout
 
 ```
-wikis/20261018-143005-gemma-3-31b/    sandbox_id = folder name (no colons: Obsidian forbids them)
+wikis/20261018-143005-qwen3-32b/      sandbox_id = folder name (no colons: Obsidian forbids them)
   SCHEMA.md   the manual (the schema layer)
   index.md    catalog, rebuilt by the server after every change
   log.md      append-only: "## [YYYY-MM-DD HH:mm] op | title"

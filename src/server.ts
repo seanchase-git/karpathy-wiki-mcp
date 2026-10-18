@@ -7,7 +7,6 @@ import { assertSize, atomicWrite, exists, writeNewAtomic } from "./fsutil.js";
 import { GUIDE } from "./guide.js";
 import { appendLog, citedSources, rebuildIndex, recentLog, type LogOp } from "./indexlog.js";
 import { lint, type Issue } from "./lint.js";
-import { loadedModels } from "./lmstudio.js";
 import {
   cleanName,
   extractLinks,
@@ -22,15 +21,12 @@ import {
   type Frontmatter,
   type Sandbox,
 } from "./pages.js";
-import { WikiRoot } from "./sandbox.js";
+import { slugifyModel, WikiRoot } from "./sandbox.js";
 import { bm25, loadChunks } from "./search.js";
 
 export interface ServerConfig {
   root: string;
   seedDir?: string;
-  lmstudioUrl: string;
-  /** Injected for tests. */
-  fetchImpl?: typeof fetch;
 }
 
 export const READ_CHUNK = 8000;
@@ -39,10 +35,13 @@ export const LINT_PAGE = 30;
 export const SEARCH_LIMIT = 10;
 export const MAX_PAGES = 2000;
 
+/** Slugs that are placeholders or example values, not a real model id. */
+const PLACEHOLDER_MODELS = new Set(["unknown-model", "your-model-id", "your-model", "my-model", "model", "model-id", "model-name"]);
+
 // ---------- lenient argument schemas ----------
 
 const msg = (field: string, example: string) => ({ error: `${field} is required, e.g. ${example}` });
-const sandboxId = z.string(msg("sandbox_id", '"20261018-143005-gemma-3-31b" (from wiki_start)')).describe("Your sandbox id from wiki_start.");
+const sandboxId = z.string(msg("sandbox_id", '"20261018-143005-my-model" (from wiki_start)')).describe("Your sandbox id from wiki_start.");
 const list = (desc: string) => z.preprocess((v) => (v === undefined || v === null ? undefined : toList(v)), z.array(z.string()).optional()).describe(desc);
 const int = (desc: string) =>
   z
@@ -208,26 +207,20 @@ export function createServer(cfg: ServerConfig, wikis = new WikiRoot(cfg.root, c
     {
       title: "Start a sandbox wiki",
       description:
-        'Create a NEW sandbox wiki and get its sandbox_id. Only call this when the user wants a new wiki. If the user gave you a sandbox_id, use that instead (wiki_status). If you are not sure, ask the user first. Example: wiki_start model="gemma-3-31b".',
+        'Create a NEW sandbox wiki and get its sandbox_id. Only call this when the user wants a new wiki. If the user gave you a sandbox_id, use that instead (wiki_status). If you are not sure, ask the user first. Example: wiki_start model="<your-model-id>", using your real model id. If nobody told you your model id, ask the user for it.',
       inputSchema: {
-        model: z.string().optional().describe('Your model name, e.g. "gemma-3-31b". Always pass it; it becomes part of the sandbox_id.'),
+        model: z.string().optional().describe("Your model id, as the user or system prompt gave it. Required; it becomes part of the sandbox_id. Never copy an example value."),
       },
     },
     async ({ model }) =>
       run(async () => {
-        let label = model?.trim();
-        if (!label) {
-          const loaded = await loadedModels(cfg.lmstudioUrl, cfg.fetchImpl);
-          if (loaded?.length === 1) label = loaded[0];
-          else {
-            throw new WikiError(
-              "model is required.",
-              loaded && loaded.length > 1
-                ? `Several models are loaded (${loaded.join(", ")}); pass the one you are.`
-                : "Pass your model name.",
-              'wiki_start model="gemma-3-31b"',
-            );
-          }
+        const label = model?.trim() ?? "";
+        if (PLACEHOLDER_MODELS.has(slugifyModel(label))) {
+          throw new WikiError(
+            label ? `"${label}" is an example, not a model id.` : "model is required.",
+            "Pass your real model id. If the user or system prompt didn't tell you, ask the user which model you are.",
+            'wiki_start model="<your-model-id>"',
+          );
         }
         const { sandbox, seeded, skipped } = await wikis.create(label);
         const lines = [

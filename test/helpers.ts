@@ -26,12 +26,12 @@ export interface Harness {
   start: (model?: string) => Promise<string>;
 }
 
-export async function harness(opts: { seed?: Record<string, string>; fetchImpl?: typeof fetch } = {}): Promise<Harness> {
+export async function harness(opts: { seed?: Record<string, string> } = {}): Promise<Harness> {
   const root = await tempDir();
   const seedDir = opts.seed ? await makeSeed(opts.seed) : undefined;
   const wikis = new WikiRoot(root, seedDir);
   await wikis.init();
-  const server = createServer({ root, seedDir, lmstudioUrl: "http://127.0.0.1:9", fetchImpl: opts.fetchImpl }, wikis);
+  const server = createServer({ root, seedDir }, wikis);
   const [a, b] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test", version: "0" });
   await Promise.all([server.connect(a), client.connect(b)]);
