@@ -179,7 +179,7 @@ export function createServer(cfg: ServerConfig, wikis = new WikiRoot(cfg.root, c
     { name: "karpathy-wiki-mcp", version: "0.1.0" },
     {
       instructions:
-        "A sandboxed LLM wiki (Karpathy pattern). Call wiki_get_info first: it explains the method and every tool. Then wiki_start to get a sandbox_id, and pass that sandbox_id on every call.",
+        "A sandboxed LLM wiki (Karpathy pattern). Call wiki_get_info first: it explains the method and every tool. If the user gave you a sandbox_id, use it (call wiki_status); if they asked for a new wiki, call wiki_start; otherwise ASK the user whether they have a sandbox_id or want a new wiki. Pass the sandbox_id on every call.",
     },
   );
 
@@ -200,7 +200,7 @@ export function createServer(cfg: ServerConfig, wikis = new WikiRoot(cfg.root, c
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
-    async () => ok(GUIDE, "if you have no sandbox_id yet, call wiki_start with your model name; otherwise call wiki_status."),
+    async () => ok(GUIDE, "if the user gave you a sandbox_id, call wiki_status with it; if they asked for a new wiki, call wiki_start; otherwise ask them which they want."),
   );
 
   server.registerTool(
@@ -208,7 +208,7 @@ export function createServer(cfg: ServerConfig, wikis = new WikiRoot(cfg.root, c
     {
       title: "Start a sandbox wiki",
       description:
-        'Create your own sandbox wiki and get its sandbox_id. Call once at the start of a session (after wiki_get_info). Example: wiki_start model="gemma-3-31b".',
+        'Create a NEW sandbox wiki and get its sandbox_id. Only call this when the user wants a new wiki. If the user gave you a sandbox_id, use that instead (wiki_status). If you are not sure, ask the user first. Example: wiki_start model="gemma-3-31b".',
       inputSchema: {
         model: z.string().optional().describe('Your model name, e.g. "gemma-3-31b". Always pass it; it becomes part of the sandbox_id.'),
       },

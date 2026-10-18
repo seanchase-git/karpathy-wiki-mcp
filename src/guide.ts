@@ -19,8 +19,11 @@ Every fact in the wiki must come from a source. Never invent facts.
 
 ## 3. Your sandbox
 Every tool except wiki_get_info and wiki_start needs \`sandbox_id\`.
-1. If you don't have one yet, call **wiki_start** with your model name. Keep the sandbox_id it returns and pass it on every call.
-2. If the user gave you a sandbox_id, use that one and call **wiki_status** first.
+1. **If the user gave you a sandbox_id** (in the system prompt or the chat), use it and call **wiki_status** first. Do NOT call wiki_start.
+2. **If the user asked for a new wiki**, call **wiki_start** with your model name.
+3. **If neither is clear, ask the user before calling any tool:** "Do you have a sandbox_id for an existing wiki, or should I start a new one?" Wait for the answer. Never guess or invent an id.
+
+Once you have a sandbox_id, pass it on every call for the rest of the conversation.
 
 ## 4. Page rules
 - **Page types** (\`type\`):
