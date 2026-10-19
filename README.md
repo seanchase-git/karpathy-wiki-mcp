@@ -48,6 +48,8 @@ Options are set as environment variables or flags:
 2. Paste a prompt from `scenarios/`, starting with `01-cold-start-ingest.md`.
 3. Open `wikis/<sandbox_id>/` **as its own Obsidian vault**, then go through that scenario's checklist. Opening the sandbox folder alone keeps `[[links]]` from resolving into other sandboxes.
 
+After rebuilding and restarting the wiki MCP server, you can tell a continuing chat: **"Call wiki_get_info again to refresh your tool instructions. For small corrections, use wiki_edit_page mode=\"patch\" with edits containing old_text and new_text; omit content and section. Keep using our existing sandbox_id."** The server also advertises patch mode in its connection instructions, tool description, the top of the manual, and wiki_status replies.
+
 `scenarios/README.md` gives the expected pages and lists the deliberate conflicts in the seed data. Don't show that file to the model.
 
 ## Sandbox layout
@@ -70,13 +72,30 @@ wikis/20261018-143005-qwen3-32b/      sandbox_id = folder name (no colons: Obsid
 - `wiki_read(name, offset)`
 - `wiki_search(query, scope)`
 - `wiki_create_page(title, type, summary, content, sources, tags)`
-- `wiki_edit_page(title, mode, content, section, summary, sources, tags)`
+- `wiki_edit_page(title, mode, content, section, edits, summary, type, sources, remove_sources, tags)`
 - `wiki_delete_page(title, reason)`
 - `wiki_add_source(title, content)`
 - `wiki_lint`
 - `wiki_log(operation, title, details)`
 
 Every tool except the first two takes `sandbox_id`.
+
+For small corrections, `wiki_edit_page` supports `mode="patch"`:
+
+```json
+{
+  "sandbox_id": "<your sandbox_id>",
+  "title": "Observatory",
+  "mode": "patch",
+  "edits": [
+    { "old_text": "The archive opens in 2027.", "new_text": "The archive opens in 2028." }
+  ]
+}
+```
+
+Omit `content` and `section`. Each nonempty `old_text` must match the page body exactly once, including whitespace; `new_text` is literal and may be empty to delete the match. A batch of 1–100 edits runs in order against the in-memory body. Missing or ambiguous matches reject the entire batch before writing the page, metadata, log, or index. Deleting the whole body is rejected. Metadata arguments still work alongside patches.
+
+This reduces text the model must generate for a small correction. In an illustrative synthetic 407-word section, a one-sentence correction required 3,592 bytes of JSON arguments with `replace_section`, versus 169 with `patch` (95.3% smaller). These are payload bytes, not measured model tokens or latency; tokenizer, prompt overhead, and model behavior affect actual savings. Use `append` for new material and `replace_section` for substantial rewrites.
 
 ## What the server does for the model
 

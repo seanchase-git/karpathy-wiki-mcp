@@ -3,7 +3,16 @@
  * 26–31B local models: short sentences, numbered recipes, one complete worked example, and
  * explicit "done when" criteria. Keep tool names and argument names in sync with server.ts.
  */
+/** Short reminder for connection instructions and resumed-session status replies. */
+export const PATCH_HINT = 'SMALL EDITS: USE wiki_edit_page mode="patch" edits=[{old_text:"exact existing text",new_text:"replacement"}]. Omit content and section. Use append for additions; replace_section/replace_all for substantial rewrites.';
+
 export const GUIDE = `# How this wiki works (read this first)
+
+**SMALL EDITS: USE PATCH.** \`wiki_edit_page\` supports \`mode="patch"\`. Send only the old text and its replacement, instead of repeating the whole section or page:
+\`wiki_edit_page sandbox_id="<your sandbox_id>" title="<existing page title>" mode="patch" edits=[{old_text:"exact existing text",new_text:"replacement"}]\`
+- Omit \`content\` and \`section\`. Each \`old_text\` must match the body exactly once, including whitespace; use text you have read, never guess it.
+- Batch small corrections to the same page in one \`edits\` array. If any match fails, none of the batch is saved.
+- Use \`append\` for additions. Use \`replace_section\` or \`replace_all\` for substantial rewrites. Metadata-only changes use \`append\` with no content.
 
 ## 1. The idea in five lines
 You are building a **persistent wiki** from source documents. It is not search done at question time.
@@ -45,7 +54,7 @@ Once you have a sandbox_id, pass it on every call for the rest of the conversati
 - **Contradictions**: when two sources disagree, keep both claims. Add or extend a \`## Contradictions\` section on the affected page, with a line like:
   \`- Year built: 1837 per [[raw/Source A]], 1842 per [[raw/Source B]].\`
   Do not silently choose one.
-- **Keep each write small**: one page per call. If a page gets long, grow it with \`mode="append"\` instead of sending one huge block.
+- **Keep each write small**: one page per call. Grow long pages with \`mode="append"\`. For small corrections, use \`mode="patch"\` with exact old/new text instead of repeating the whole section.
 
 ## 5. INGEST: add one source to the wiki
 Do one source at a time and finish it before starting the next.
@@ -54,7 +63,7 @@ Do one source at a time and finish it before starting the next.
 3. For each important entity and concept in the source, call \`wiki_search\` with its name, to see whether a page already exists.
 4. Create the source page with \`wiki_create_page type="source"\`: the source's key points, plus links to the entity and concept pages.
 5. For each important entity or concept:
-   - if a page exists, use \`wiki_edit_page\` (\`append\` new facts, or \`replace_section\`) and add this source to \`sources\`;
+   - if a page exists, use \`wiki_edit_page\` (\`append\` new facts, \`patch\` small corrections, or \`replace_section\` for substantial rewrites) and add this source to \`sources\`;
    - if not, \`wiki_create_page\`.
 
    Create only pages the source really supports. There is no page quota.
@@ -122,8 +131,11 @@ wiki_log sandbox_id="20261018-143005-my-model" operation="ingest" title="Example
 - **wiki_read** \`name\`: a page title, \`raw/<source>\`, \`index\`, \`log\` or \`SCHEMA\`. Add \`offset\` to continue a long file.
 - **wiki_search** \`query\`, \`scope\` (\`"wiki"\` by default, or \`"raw"\` or \`"all"\`): ranked matches with line numbers.
 - **wiki_create_page** \`title\` \`type\` \`summary\` \`content\` \`sources\` \`tags\`: a new page. Fails if the page exists.
-- **wiki_edit_page** \`title\` \`mode\` \`content\`:
-  - \`mode\` is \`"append"\`, \`"replace_section"\` (also give \`section\`, the heading text) or \`"replace_all"\`;
+- **wiki_edit_page** \`title\` \`mode\`:
+  - \`mode="patch"\`: pass \`edits=[{old_text:"exact existing text",new_text:"replacement"}]\`; omit \`content\` and \`section\`. Use for small corrections to avoid repeating unchanged text;
+  - each \`old_text\` must be nonempty and match the body exactly once, including whitespace. Include more context if ambiguous. Frontmatter is edited through metadata arguments;
+  - 1–100 edits run in order, each against the preceding edit's result. If any match fails, none of the batch is saved. Empty \`new_text\` deletes a match; erasing the whole body is rejected;
+  - for other modes, give \`content\`: \`"append"\`, \`"replace_section"\` (also give \`section\`, the heading text) or \`"replace_all"\`; omit \`edits\`;
   - optional \`summary\` and \`type\` replace the old values;
   - optional \`sources\` and \`tags\` are added to the existing lists (with \`mode="replace_all"\`, \`sources\` replaces the list);
   - optional \`remove_sources\` removes entries from the sources list.

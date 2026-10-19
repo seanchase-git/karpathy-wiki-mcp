@@ -72,6 +72,12 @@ async function main() {
     });
     check(!ent.includes("Missing links"), "no missing links after creating both pages");
 
+    const patched = await call("wiki_edit_page", {
+      sandbox_id: id, title: "E2E Entity", mode: "patch",
+      edits: [{ old_text: "Mentioned in", new_text: "Described in" }],
+    });
+    check(patched.includes("patch (1 edit)"), "patch mode works over stdio");
+
     check((await call("wiki_search", { sandbox_id: id, query: "E2E entity" })).includes("1. E2E Entity"), "search finds the new page");
     const status = await call("wiki_status", { sandbox_id: id });
     check(status.includes(`raw/${firstSource} — ingested`), "status shows the source as ingested");
@@ -86,6 +92,7 @@ async function main() {
     check(/\] ingest \| /.test(log), "log.md has the agent's ingest entry");
     const page = await readFile(path.join(dir, "wiki", "E2E Entity.md"), "utf8");
     check(page.startsWith("---\ntitle: E2E Entity\ntype: entity\n"), "page frontmatter written by server");
+    check(page.includes(`Described in [[${firstSource} summary]].`), "patch persisted the exact replacement");
     console.log(`\nE2E PASSED${process.env.KEEP_E2E === "1" ? ` (sandbox kept at ${dir})` : ""}`);
   } finally {
     await client.close();

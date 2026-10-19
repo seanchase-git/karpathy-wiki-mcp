@@ -4,7 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import * as z from "zod";
 import { WikiError } from "./errors.js";
 import { assertSize, atomicWrite, exists, writeNewAtomic } from "./fsutil.js";
-import { GUIDE } from "./guide.js";
+import { GUIDE, PATCH_HINT } from "./guide.js";
 import { appendLog, citedSources, rebuildIndex, recentLog, type LogOp } from "./indexlog.js";
 import { lint, type Issue } from "./lint.js";
 import {
@@ -54,7 +54,7 @@ const choice = <T extends string>(values: readonly [T, ...T[]], synonyms: Record
     return synonyms[k] ?? k;
   }, z.enum(values, { error: `must be one of: ${values.join(", ")}` })).describe(desc);
 
-const MODES = ["append", "replace_section", "replace_all"] as const;
+const MODES = ["append", "replace_section", "replace_all", "patch"] as const;
 const MODE_SYN: Record<string, (typeof MODES)[number]> = {
   add: "append", extend: "append", replace: "replace_all", overwrite: "replace_all", rewrite: "replace_all", all: "replace_all",
   section: "replace_section", replacesection: "replace_section", update_section: "replace_section",
@@ -178,7 +178,7 @@ export function createServer(cfg: ServerConfig, wikis = new WikiRoot(cfg.root, c
     { name: "karpathy-wiki-mcp", version: "0.1.0" },
     {
       instructions:
-        "A sandboxed LLM wiki (Karpathy pattern). Call wiki_get_info first: it explains the method and every tool. If the user gave you a sandbox_id, use it (call wiki_status); if they asked for a new wiki, call wiki_start; otherwise ASK the user whether they have a sandbox_id or want a new wiki. Pass the sandbox_id on every call.",
+        `A sandboxed LLM wiki (Karpathy pattern). ${PATCH_HINT} Call wiki_get_info first: it explains the method and every tool. If the user gave you a sandbox_id, use it (call wiki_status); if they asked for a new wiki, call wiki_start; otherwise ASK the user whether they have a sandbox_id or want a new wiki. Pass the sandbox_id on every call.`,
     },
   );
 
@@ -195,7 +195,7 @@ export function createServer(cfg: ServerConfig, wikis = new WikiRoot(cfg.root, c
     {
       title: "Wiki manual",
       description:
-        "Read this FIRST. Explains how the wiki works (ingest, query, lint), the page rules, a worked example, and every tool. No arguments.",
+        'Read this FIRST for current tool instructions, including wiki_edit_page mode="patch" for small edits. Explains ingest/query/lint, page rules, a worked example, and every tool. No arguments.',
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
@@ -265,6 +265,8 @@ export function createServer(cfg: ServerConfig, wikis = new WikiRoot(cfg.root, c
         const log = await recentLog(sb, 5);
         const text = [
           `# Sandbox ${sb.id}`,
+          "",
+          PATCH_HINT,
           "",
           `Wiki pages: ${pages.length}${byType.size ? ` (${[...byType].map(([t, n]) => `${t}: ${n}`).join(", ")})` : ""}`,
           "",
@@ -484,15 +486,19 @@ export function createServer(cfg: ServerConfig, wikis = new WikiRoot(cfg.root, c
   server.registerTool(
     "wiki_edit_page",
     {
-      title: "Edit a wiki page",
+      title: "Edit a wiki page (patch for small changes)",
       description:
-        'Change an existing page. mode="append" adds content at the end; mode="replace_section" replaces one "## Heading" section (give section); mode="replace_all" replaces the whole body. summary and type replace the old values; sources and tags are ADDED to the existing lists (with mode="replace_all", sources REPLACE the list); remove_sources deletes entries. Example: wiki_edit_page sandbox_id="..." title="Ada Lovelace" mode="append" content="## Later life\\n..." sources=["raw/Another Article"].',
+        'SMALL EDITS: USE mode="patch" with edits=[{old_text:"exact existing text",new_text:"replacement"}]; omit content and section. Each old_text must match the body exactly once; edits run in order and all must succeed before saving. mode="append" adds content; "replace_section" replaces a section (give section); "replace_all" replaces the body. summary/type replace values; sources/tags are added (replace_all replaces sources); remove_sources deletes entries.',
       inputSchema: {
         sandbox_id: sandboxId,
         title: z.string(msg("title", '"Ada Lovelace"')).describe("Title of the existing page."),
-        mode: choice(MODES, MODE_SYN, '"append", "replace_section" or "replace_all".'),
-        content: z.string().optional().describe('Markdown to add or replace with. May be "" when you only change summary/sources/tags.'),
+        mode: choice(MODES, MODE_SYN, '"append", "replace_section", "replace_all" or "patch" (small edits).'),
+        content: z.string().optional().describe('Markdown to add or replace with. Omit for patch; may be "" for metadata-only append.'),
         section: z.string().optional().describe('Required for mode="replace_section": the heading text, e.g. "Early life".'),
+        edits: z.array(z.object({
+          old_text: z.string().min(1).describe("Exact body text to match once, including whitespace."),
+          new_text: z.string().describe('Literal replacement; "" deletes the matched text.'),
+        })).min(1).max(100).optional().describe("Required for patch only: 1–100 edits, applied in order. Invalid edits save nothing."),
         summary: z.string().optional().describe("New one-sentence summary (optional)."),
         type: z.string().optional().describe("New page type (optional): source, entity, concept, comparison, synthesis, overview."),
         sources: list("Raw sources to add (optional)."),
@@ -503,6 +509,12 @@ export function createServer(cfg: ServerConfig, wikis = new WikiRoot(cfg.root, c
     async (args) =>
       run(async () => {
         const sb = await wikis.open(args.sandbox_id);
+        if (args.mode === "patch") {
+          if (!args.edits?.length) throw new WikiError('mode="patch" needs edits.', 'Pass edits=[{old_text:"exact body text",new_text:"replacement"}].');
+          if (args.content !== undefined || args.section !== undefined) throw new WikiError('mode="patch" uses edits, not content or section.', "Omit content and section; put replacements in edits.");
+        } else if (args.edits !== undefined) {
+          throw new WikiError('edits requires mode="patch".', 'Use mode="patch", or omit edits.');
+        }
         if (args.mode === "replace_section" && !args.section?.trim()) {
           throw new WikiError(
             'mode="replace_section" needs section (the heading text).',
@@ -511,7 +523,7 @@ export function createServer(cfg: ServerConfig, wikis = new WikiRoot(cfg.root, c
           );
         }
         const content = args.content ?? "";
-        const metaOnly = !content.trim();
+        const metaOnly = args.mode !== "patch" && !content.trim();
         if (metaOnly && args.mode !== "append") {
           throw new WikiError(`content is empty, which would erase ${args.mode === "replace_all" ? "the whole page" : "the section"}.`, "Pass the new content. To delete a page use wiki_delete_page.");
         }
@@ -525,8 +537,17 @@ export function createServer(cfg: ServerConfig, wikis = new WikiRoot(cfg.root, c
           const parsed = parsePage(await fs.readFile(file, "utf8"));
           const fm: Frontmatter = { ...parsed.frontmatter, title };
           const { body: incoming, fm: inline } = cleanBody(content, title);
-          let body = parsed.body.trim();
-          if (!metaOnly) {
+          let body = args.mode === "patch" ? parsed.body : parsed.body.trim();
+          if (args.mode === "patch") {
+            for (const [i, edit] of args.edits!.entries()) {
+              const start = body.indexOf(edit.old_text);
+              if (start < 0) throw new WikiError(`Patch edit ${i + 1}: old_text was not found in the page body. No changes saved.`, "Read the page and copy the exact text, including whitespace. Frontmatter uses the metadata arguments.");
+              if (body.indexOf(edit.old_text, start + 1) >= 0) throw new WikiError(`Patch edit ${i + 1}: old_text occurs more than once. No changes saved.`, "Include enough surrounding text to match exactly once.");
+              // Slicing keeps replacement text literal, including $& and $1.
+              body = body.slice(0, start) + edit.new_text + body.slice(start + edit.old_text.length);
+            }
+            if (!body.trim()) throw new WikiError("Patch would erase the whole page. No changes saved.", "Use wiki_delete_page to delete a page.");
+          } else if (!metaOnly) {
             if (args.mode === "append") body = body ? `${body}\n\n${incoming}` : incoming;
             else if (args.mode === "replace_all") body = incoming;
             else body = replaceSection(body, args.section!, incoming);
@@ -549,7 +570,7 @@ export function createServer(cfg: ServerConfig, wikis = new WikiRoot(cfg.root, c
           fm.created ??= nowIso();
           fm.updated = nowIso();
           await atomicWrite(file, serializePage(fm, body));
-          const what = metaOnly ? "metadata" : args.mode === "replace_section" ? `section "${args.section}"` : args.mode;
+          const what = metaOnly ? "metadata" : args.mode === "patch" ? `patch (${args.edits!.length} edit${args.edits!.length === 1 ? "" : "s"})` : args.mode === "replace_section" ? `section "${args.section}"` : args.mode;
           await appendLog(sb, "edit", title, what);
           const notes = [await linkReport(sb, body, fm, title)];
           if (unknown.length) notes.push(`Warning: these sources do not exist and were NOT saved: ${unknown.join(", ")}. Check the names with wiki_list folder="raw".`);
